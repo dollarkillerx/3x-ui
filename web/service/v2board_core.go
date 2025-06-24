@@ -113,6 +113,9 @@ func (c *V2boardCore) syncUsers() {
 		}
 
 		if !found {
+			if inboundUser.Email == "admin" {
+				continue
+			}
 			err := c.xrayApi.RemoveUser(oldInbound.Tag, inboundUser.Email)
 			if err != nil {
 				log.Printf("无法删除用户 %s: %v \n", inboundUser.Email, err)

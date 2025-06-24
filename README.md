@@ -14,3 +14,6 @@ if err != nil {
 
 // web/service/inbound.go
 ```
+
+docker build -t dollarkiller/x3pro:latest .
+docker push dollarkiller/x3pro:latest
