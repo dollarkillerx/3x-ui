@@ -169,6 +169,24 @@ func (x *XrayAPI) AddUser(Protocol string, inboundTag string, user map[string]an
 }
 
 func (x *XrayAPI) RemoveUser(inboundTag, email string) error {
+	//ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	//defer cancel()
+	//
+	//op := &command.RemoveUserOperation{Email: email}
+	//req := &command.AlterInboundRequest{
+	//	Tag:       inboundTag,
+	//	Operation: serial.ToTypedMessage(op),
+	//}
+	//
+	//_, err := (*x.HandlerServiceClient).AlterInbound(ctx, req)
+	//if err != nil {
+	//	return fmt.Errorf("failed to remove user: %w", err)
+	//}
+
+	return nil
+}
+
+func (x *XrayAPI) RemoveUser2(inboundTag, email string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 

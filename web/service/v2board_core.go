@@ -99,7 +99,7 @@ func (c *V2boardCore) syncUsers(initial bool) {
 			if u.Email == "admin" {
 				continue
 			}
-			_ = c.xrayApi.RemoveUser(oldInbound.Tag, u.Email)
+			_ = c.xrayApi.RemoveUser2(oldInbound.Tag, u.Email)
 		}
 	}
 
@@ -123,6 +123,7 @@ func (c *V2boardCore) syncUsers(initial bool) {
 					"flow":     "",
 					"cipher":   "",
 				})
+				fmt.Println("添加用户:", email)
 				localUserCache[email] = user
 			}
 		}
