@@ -1,6 +1,6 @@
 services:
   3x-ui:
-    image: dollarkillerx/x3pro:latest
+    image: dollarkiller/x3pro:latest
     container_name: 3xpro
     hostname: yourhostname
     volumes:
