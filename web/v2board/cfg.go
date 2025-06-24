@@ -26,8 +26,8 @@ type V2boardConfig struct {
 
 func GetV2boardConfig() V2boardConfig {
 	return V2boardConfig{
-		ApiHost:             getEnv("API_HOST", "https://api.hisuyou.org"),
-		ApiKey:              getEnv("API_KEY", "a60a866d-97b4-411c-ae97-a208e1ed4f09"),
+		ApiHost:             getEnv("API_HOST", "https://api.xxx.org"),
+		ApiKey:              getEnv("API_KEY", "ae97-a208e1ed4f09"),
 		NodeID:              getEnv("NODE_ID", "5"),
 		NodeType:            getEnv("NODE_TYPE", "shadowsocks"),
 		NodePollingInterval: getEnvAsInt("NODE_POLLING_INTERVAL", 60),
