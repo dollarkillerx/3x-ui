@@ -173,12 +173,12 @@ func (s *XrayService) GetXrayTraffic() ([]*xray.Traffic, []*xray.ClientTraffic, 
 	s.xrayAPI.Init(apiPort)
 	defer s.xrayAPI.Close()
 
-	traffic, clientTraffic, err := s.xrayAPI.GetTraffic(true)
-	if err != nil {
-		logger.Debug("Failed to fetch Xray traffic:", err)
-		return nil, nil, err
-	}
-	return traffic, clientTraffic, nil
+	//traffic, clientTraffic, err := s.xrayAPI.GetTraffic(true)
+	//if err != nil {
+	//	logger.Debug("Failed to fetch Xray traffic:", err)
+	//	return nil, nil, err
+	//}
+	return []*xray.Traffic{}, []*xray.ClientTraffic{}, nil
 }
 
 func (s *XrayService) RestartXray(isForce bool) error {

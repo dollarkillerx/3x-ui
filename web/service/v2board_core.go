@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"log"
 	"resty.dev/v3"
+	"strconv"
 	"time"
 	"x-ui/database"
 	"x-ui/database/model"
+	"x-ui/logger"
 	"x-ui/web/v2board"
 	"x-ui/xray"
 )
@@ -17,7 +19,9 @@ type V2boardCore struct {
 }
 
 func NewV2boardCore() *V2boardCore {
-	return &V2boardCore{}
+	return &V2boardCore{
+		xrayApi: xray.XrayAPI{},
+	}
 }
 
 func (c *V2boardCore) Run() {
@@ -75,7 +79,7 @@ func (c *V2boardCore) syncUsers() {
 	defer c.xrayApi.Close()
 	for _, user := range users.Users {
 		err := c.xrayApi.AddUser(string(oldInbound.Protocol), oldInbound.Tag, map[string]any{
-			"email":    user.Uuid,
+			"email":    fmt.Sprintf("%d", user.Id),
 			"id":       user.Uuid,
 			"security": "",
 			"flow":     "",
@@ -119,8 +123,59 @@ func (c *V2boardCore) syncUsers() {
 
 // ReportTraffic 上报用户流量
 func (c *V2boardCore) reportTraffic() {
-	// 实现向面板提交每个用户的流量统计
+	c.xrayApi.Init(p.GetAPIPort())
+	defer c.xrayApi.Close()
 
+	// 实现向面板提交每个用户的流量统计
+	_, clientTraffic, err := c.xrayApi.GetTraffic(true)
+	if err != nil {
+		logger.Debug("Failed to fetch Xray traffic:", err)
+		return
+	}
+
+	client := resty.New()
+	defer client.Close()
+
+	// ?node_id=6&node_type=vless&token=f0f056fb-5428-4ffc-8dd2-7c091962de7f
+	config := v2board.GetV2boardConfig()
+
+	var trafficData map[int][]int64 // 用户id: []int64{上行流量,下行流量}
+	trafficData = make(map[int][]int64)
+	for _, cx := range clientTraffic {
+		if cx.Up == 0 && cx.Down == 0 {
+			continue
+		}
+		// 将流量数据提交给面板
+
+		atoi, err := strconv.Atoi(cx.Email)
+		if err != nil {
+			continue
+		}
+
+		trafficData[atoi] = []int64{cx.Up, cx.Down}
+	}
+
+	resp, err := client.R().
+		SetQueryParams(map[string]string{
+			"token":     config.ApiKey,
+			"node_type": config.NodeType,
+			"node_id":   config.NodeID,
+		}).
+		SetHeader("Content-Type", "application/json").
+		SetBody(trafficData).
+		Post(fmt.Sprintf("%s/api/v1/server/UniProxy/push", config.ApiHost))
+
+	if err != nil {
+		log.Printf("Error syncing users: %s \n", err)
+		return
+	}
+
+	if resp.StatusCode() != 200 {
+		log.Printf("Error syncing users: %s \n", err)
+		return
+	}
+
+	fmt.Println("流量上报成功")
 }
 
 func (c *V2boardCore) GetInbound(id int) (*model.Inbound, error) {
