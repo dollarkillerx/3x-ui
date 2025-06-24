@@ -42,6 +42,7 @@ func (c *V2boardCore) Run() {
 
 // SyncUsers 同步用户数据
 func (c *V2boardCore) syncUsers() {
+	fmt.Println("用户数据同步中.........")
 	// 实现用户从面板拉取并写入本地配置等逻辑
 	config := v2board.GetV2boardConfig()
 	client := resty.New()
@@ -67,6 +68,8 @@ func (c *V2boardCore) syncUsers() {
 		log.Printf("Error syncing users: %s \n", err)
 		return
 	}
+
+	fmt.Printf("获得用户数据: %d 个\n", len(users.Users))
 
 	oldInbound, err := c.GetInbound(1)
 	if err != nil {
@@ -116,13 +119,17 @@ func (c *V2boardCore) syncUsers() {
 			} else {
 				log.Printf("已删除过期用户: %s \n", inboundUser.Email)
 			}
+			fmt.Println("删除用户:", inboundUser.Email)
 		}
 	}
+
+	fmt.Println("用户数据同步完成")
 
 }
 
 // ReportTraffic 上报用户流量
 func (c *V2boardCore) reportTraffic() {
+	fmt.Println("上报用户流量中.........")
 	c.xrayApi.Init(p.GetAPIPort())
 	defer c.xrayApi.Close()
 
@@ -155,6 +162,10 @@ func (c *V2boardCore) reportTraffic() {
 		trafficData[atoi] = []int64{cx.Up, cx.Down}
 	}
 
+	if len(trafficData) == 0 {
+		fmt.Println("无流量数据")
+		return
+	}
 	resp, err := client.R().
 		SetQueryParams(map[string]string{
 			"token":     config.ApiKey,
@@ -175,7 +186,7 @@ func (c *V2boardCore) reportTraffic() {
 		return
 	}
 
-	fmt.Println("流量上报成功")
+	fmt.Printf("流量上报成功 %d \n", len(trafficData))
 }
 
 func (c *V2boardCore) GetInbound(id int) (*model.Inbound, error) {
