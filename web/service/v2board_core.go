@@ -105,51 +105,30 @@ func (c *V2boardCore) syncUsers(initial bool) {
 
 	// 批量插入新用户（每批1000个）
 	batchSize := 1000
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, 10) // 并发限制 100 个
-
+	userCacheLock.Lock()
 	for i := 0; i < len(remoteUsers.Users); i += batchSize {
 		end := i + batchSize
 		if end > len(remoteUsers.Users) {
 			end = len(remoteUsers.Users)
 		}
 		batch := remoteUsers.Users[i:end]
-
-		for idx, _ := range batch {
-			wg.Add(1)
-			sem <- struct{}{} // 占用一个槽位
-
-			go func(user v2board.UserItem) {
-				defer wg.Done()
-				defer func() { <-sem }() // 释放槽位
-
-				email := strconv.Itoa(user.Id)
-
-				userCacheLock.Lock()
-				localUser, exists := localUserCache[email]
-				userCacheLock.Unlock()
-
-				if !exists || localUser.Uuid != user.Uuid {
-					err := c.xrayApi.AddOrReplaceUser(string(oldInbound.Protocol), oldInbound.Tag, map[string]any{
-						"email":    email,
-						"id":       user.Uuid,
-						"password": user.Uuid,
-						"flow":     "",
-						"cipher":   "",
-					})
-					if err == nil {
-						userCacheLock.Lock()
-						localUserCache[email] = user
-						userCacheLock.Unlock()
-					} else {
-						log.Printf("添加用户失败 %s: %v\n", email, err)
-					}
-				}
-			}(batch[idx])
+		for _, user := range batch {
+			email := strconv.Itoa(user.Id)
+			localUser, exists := localUserCache[email]
+			if !exists || localUser.Uuid != user.Uuid {
+				_ = c.xrayApi.AddUser(string(oldInbound.Protocol), oldInbound.Tag, map[string]any{
+					"email":    email,
+					"id":       user.Uuid,
+					"password": user.Uuid,
+					"flow":     "",
+					"cipher":   "",
+				})
+				//fmt.Println("添加用户:", email)
+				localUserCache[email] = user
+			}
 		}
 	}
-
-	wg.Wait() // 等待所有并发任务完成
+	userCacheLock.Unlock()
 
 	if !initial {
 		// 差异对比：删除远程不存在的用户
