@@ -103,6 +103,13 @@ func (c *V2boardCore) syncUsers(initial bool) {
 		}
 	}
 
+	var oldSettings map[string]any
+	err = json.Unmarshal([]byte(oldInbound.Settings), &oldSettings)
+	if err != nil {
+		log.Printf("Error unmarshaling settings: %s \n", err)
+		return
+	}
+
 	// 批量插入新用户（每批1000个）
 	batchSize := 1000
 	userCacheLock.Lock()
@@ -116,12 +123,16 @@ func (c *V2boardCore) syncUsers(initial bool) {
 			email := strconv.Itoa(user.Id)
 			localUser, exists := localUserCache[email]
 			if !exists || localUser.Uuid != user.Uuid {
+				cipher := ""
+				if oldInbound.Protocol == "shadowsocks" {
+					cipher = oldSettings["method"].(string)
+				}
 				err = c.xrayApi.AddUser(string(oldInbound.Protocol), oldInbound.Tag, map[string]any{
 					"email":    email,
 					"id":       user.Uuid,
 					"password": user.Uuid,
 					"flow":     "",
-					"cipher":   "",
+					"cipher":   cipher,
 				})
 				if err != nil {
 					log.Printf("Xray API add user failed: %s \n", err)
