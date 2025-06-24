@@ -1,16 +1,20 @@
 services:
-  3xui:
-    build:
-      context: .
-      dockerfile: ./Dockerfile
-    container_name: 3xui_app
-    # hostname: yourhostname <- optional
+  3x-ui:
+    image: dollarkillerx/x3pro:latest
+    container_name: 3xpro
+    hostname: yourhostname
     volumes:
-      - $PWD/db/:/etc/x-ui/
-      - $PWD/cert/:/root/cert/
+      - $PWD/db2/:/etc/x-ui/
+      - $PWD/cert2/:/root/cert/
     environment:
       XRAY_VMESS_AEAD_FORCED: "false"
-      XUI_ENABLE_FAIL2BAN: "true"
+      X_UI_ENABLE_FAIL2BAN: "true"
+      API_HOST: ""
+      API_KEY: ""
+      NODE_ID: ""
+      NODE_TYPE: "shadowsocks"
+      NODE_POLLING_INTERVAL: "60"
+      NODE_PUSHING_INTERVAL: "60"
     tty: true
     network_mode: host
     restart: unless-stopped
