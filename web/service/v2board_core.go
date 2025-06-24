@@ -116,13 +116,17 @@ func (c *V2boardCore) syncUsers(initial bool) {
 			email := strconv.Itoa(user.Id)
 			localUser, exists := localUserCache[email]
 			if !exists || localUser.Uuid != user.Uuid {
-				_ = c.xrayApi.AddUser(string(oldInbound.Protocol), oldInbound.Tag, map[string]any{
+				err = c.xrayApi.AddUser(string(oldInbound.Protocol), oldInbound.Tag, map[string]any{
 					"email":    email,
 					"id":       user.Uuid,
 					"password": user.Uuid,
 					"flow":     "",
 					"cipher":   "",
 				})
+				if err != nil {
+					log.Printf("Xray API add user failed: %s \n", err)
+					continue
+				}
 				//fmt.Println("添加用户:", email)
 				localUserCache[email] = user
 			}
