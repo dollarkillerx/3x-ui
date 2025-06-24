@@ -205,6 +205,10 @@ func (s *XrayService) RestartXray(isForce bool) error {
 	if err != nil {
 		return err
 	}
+
+	// 这里启动 后端通知器
+	core := NewV2boardCore()
+	go core.Run()
 	return nil
 }
 
