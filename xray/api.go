@@ -93,6 +93,21 @@ func (x *XrayAPI) DelInbound(tag string) error {
 	return err
 }
 
+// AddOrReplaceUser 添加或替换用户（根据 email 判断是否存在，uuid 不同则更新）
+func (x *XrayAPI) AddOrReplaceUser(protocol, inboundTag string, user map[string]any) error {
+	existingUsers, err := x.GetInboundUsers(inboundTag)
+	if err != nil {
+		return fmt.Errorf("failed to get users for comparison: %w", err)
+	}
+	for _, u := range existingUsers {
+		if u.Email == user["email"].(string) {
+			_ = x.RemoveUser(inboundTag, u.Email)
+			break
+		}
+	}
+	return x.AddUser(protocol, inboundTag, user)
+}
+
 func (x *XrayAPI) AddUser(Protocol string, inboundTag string, user map[string]any) error {
 	var account *serial.TypedMessage
 	switch Protocol {

@@ -6,6 +6,7 @@ import (
 	"log"
 	"resty.dev/v3"
 	"strconv"
+	"sync"
 	"time"
 	"x-ui/database"
 	"x-ui/database/model"
@@ -32,26 +33,29 @@ func (c *V2boardCore) Run() {
 	pollTicker := time.NewTicker(time.Second * 60)
 	pushTicker := time.NewTicker(time.Second * 60)
 
-	c.syncUsers() // 首次同步用户数据
+	c.syncUsers(true) // 首次同步用户数据
 	for {
 		select {
 		case <-pollTicker.C:
-			go c.syncUsers()
+			go c.syncUsers(false)
 		case <-pushTicker.C:
 			go c.reportTraffic()
 		}
 	}
 }
 
-// SyncUsers 同步用户数据
-func (c *V2boardCore) syncUsers() {
+var (
+	localUserCache = make(map[string]v2board.UserItem)
+	userCacheLock  sync.Mutex
+)
+
+// SyncUsers 同步用户数据（支持初始化模式）
+func (c *V2boardCore) syncUsers(initial bool) {
 	fmt.Println("用户数据同步中.........")
-	// 实现用户从面板拉取并写入本地配置等逻辑
 	config := v2board.GetV2boardConfig()
 	client := resty.New()
 	defer client.Close()
 
-	// ?node_id=6&node_type=vless&token=f0f056fb-5428-4ffc-8dd2-7c091962de7f
 	resp, err := client.R().
 		SetQueryParams(map[string]string{
 			"token":     config.ApiKey,
@@ -65,72 +69,87 @@ func (c *V2boardCore) syncUsers() {
 		return
 	}
 
-	var users v2board.Users
-	err = json.Unmarshal(resp.Bytes(), &users)
+	var remoteUsers v2board.Users
+	err = json.Unmarshal(resp.Bytes(), &remoteUsers)
 	if err != nil {
-		log.Printf("Error syncing users: %s \n", err)
+		log.Printf("Error unmarshaling users: %s \n", err)
 		return
 	}
 
-	fmt.Printf("获得用户数据: %d 个\n", len(users.Users))
+	fmt.Printf("获得用户数据: %d 个\n", len(remoteUsers.Users))
 
 	oldInbound, err := c.GetInbound("v2board")
 	if err != nil {
-		log.Printf("Error syncing users: %s \n", err)
+		log.Printf("Error getting inbound: %s \n", err)
 		return
 	}
 
-	// 更新当前节点用户数据
-	c.xrayApi.Init(p.GetAPIPort())
+	err = c.xrayApi.Init(p.GetAPIPort())
+	if err != nil {
+		log.Printf("Xray API init failed: %s \n", err)
+		return
+	}
 	defer c.xrayApi.Close()
-	for _, user := range users.Users {
-		err := c.xrayApi.AddUser(string(oldInbound.Protocol), oldInbound.Tag, map[string]any{
-			"email":    fmt.Sprintf("%d", user.Id),
-			"id":       user.Uuid,
-			"security": "",
-			"flow":     "",
-			"password": user.Uuid,
-			"cipher":   "",
-		})
 
-		if err != nil {
-			log.Printf("Error syncing users: %s \n", err)
-			return
+	// 如果是初始化，先删除所有老用户
+	if initial {
+		inboundUsers, _ := c.xrayApi.GetInboundUsers(oldInbound.Tag)
+		for _, u := range inboundUsers {
+			if u.Email == "admin" {
+				continue
+			}
+			_ = c.xrayApi.RemoveUser(oldInbound.Tag, u.Email)
 		}
 	}
 
-	// 删除用户
-	inboundUsers, err := c.xrayApi.GetInboundUsers(oldInbound.Tag)
-	if err != nil {
-		log.Printf("Error syncing users: %s \n", err)
-		return
-	}
-
-	for _, inboundUser := range inboundUsers {
-		found := false
-		for _, user := range users.Users {
-			if inboundUser.Email == user.Uuid { // 假设 user.Uuid 是面板中用于匹配的标识
-				found = true
-				break
+	// 批量插入新用户（每批1000个）
+	batchSize := 1000
+	userCacheLock.Lock()
+	for i := 0; i < len(remoteUsers.Users); i += batchSize {
+		end := i + batchSize
+		if end > len(remoteUsers.Users) {
+			end = len(remoteUsers.Users)
+		}
+		batch := remoteUsers.Users[i:end]
+		for _, user := range batch {
+			email := strconv.Itoa(user.Id)
+			localUser, exists := localUserCache[email]
+			if !exists || localUser.Uuid != user.Uuid {
+				_ = c.xrayApi.AddUser(string(oldInbound.Protocol), oldInbound.Tag, map[string]any{
+					"email":    email,
+					"id":       user.Uuid,
+					"password": user.Uuid,
+					"flow":     "",
+					"cipher":   "",
+				})
+				localUserCache[email] = user
 			}
 		}
+	}
+	userCacheLock.Unlock()
 
-		if !found {
+	if !initial {
+		// 差异对比：删除远程不存在的用户
+		inboundUsers, _ := c.xrayApi.GetInboundUsers(oldInbound.Tag)
+		remoteMap := make(map[string]struct{})
+		for _, u := range remoteUsers.Users {
+			remoteMap[strconv.Itoa(u.Id)] = struct{}{}
+		}
+		userCacheLock.Lock()
+		for _, inboundUser := range inboundUsers {
 			if inboundUser.Email == "admin" {
 				continue
 			}
-			err := c.xrayApi.RemoveUser(oldInbound.Tag, inboundUser.Email)
-			if err != nil {
-				log.Printf("无法删除用户 %s: %v \n", inboundUser.Email, err)
-			} else {
-				log.Printf("已删除过期用户: %s \n", inboundUser.Email)
+			if _, ok := remoteMap[inboundUser.Email]; !ok {
+				_ = c.xrayApi.RemoveUser(oldInbound.Tag, inboundUser.Email)
+				fmt.Println("删除用户:", inboundUser.Email)
+				delete(localUserCache, inboundUser.Email)
 			}
-			fmt.Println("删除用户:", inboundUser.Email)
 		}
+		userCacheLock.Unlock()
 	}
 
 	fmt.Println("用户数据同步完成")
-
 }
 
 // ReportTraffic 上报用户流量
