@@ -92,8 +92,9 @@ func (c *V2boardCore) syncUsers(initial bool) {
 	defer c.xrayApi.Close()
 
 	// 如果是初始化，先删除所有老用户
+	inboundUsers, _ := c.xrayApi.GetInboundUsers(oldInbound.Tag)
+	fmt.Println("当前系统用户数: ", len(inboundUsers))
 	if initial {
-		inboundUsers, _ := c.xrayApi.GetInboundUsers(oldInbound.Tag)
 		for _, u := range inboundUsers {
 			if u.Email == "admin" {
 				continue
