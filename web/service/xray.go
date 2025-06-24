@@ -207,10 +207,14 @@ func (s *XrayService) RestartXray(isForce bool) error {
 	}
 
 	// 这里启动 后端通知器
-	core := NewV2boardCore()
-	go core.Run()
+	once.Do(func() {
+		core := NewV2boardCore()
+		go core.Run()
+	})
 	return nil
 }
+
+var once sync.Once
 
 func (s *XrayService) StopXray() error {
 	lock.Lock()

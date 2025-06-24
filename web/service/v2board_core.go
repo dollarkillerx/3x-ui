@@ -181,7 +181,6 @@ func (c *V2boardCore) reportTraffic() {
 		SetHeader("Content-Type", "application/json").
 		SetBody(trafficData).
 		Post(fmt.Sprintf("%s/api/v1/server/UniProxy/push", config.ApiHost))
-
 	if err != nil {
 		log.Printf("Error syncing users: %s \n", err)
 		return
