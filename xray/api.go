@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"regexp"
 	"time"
-	"math"
 
 	"x-ui/logger"
 	"x-ui/util/common"
@@ -169,6 +169,22 @@ func (x *XrayAPI) RemoveUser(inboundTag, email string) error {
 	}
 
 	return nil
+}
+
+func (x *XrayAPI) GetInboundUsers(inboundTag string) ([]*protocol.User, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	req := &command.GetInboundUserRequest{
+		Tag: inboundTag,
+	}
+
+	resp, err := (*x.HandlerServiceClient).GetInboundUsers(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get users for inbound %s: %w", inboundTag, err)
+	}
+
+	return resp.GetUsers(), nil
 }
 
 func (x *XrayAPI) GetTraffic(reset bool) ([]*Traffic, []*ClientTraffic, error) {
