@@ -25,9 +25,12 @@ func NewV2boardCore() *V2boardCore {
 }
 
 func (c *V2boardCore) Run() {
-	config := v2board.GetV2boardConfig()
-	pollTicker := time.NewTicker(time.Second * time.Duration(config.NodePollingInterval))
-	pushTicker := time.NewTicker(time.Second * time.Duration(config.NodePushingInterval))
+	//config := v2board.GetV2boardConfig()
+	//pollTicker := time.NewTicker(time.Second * time.Duration(config.NodePollingInterval))
+	//pushTicker := time.NewTicker(time.Second * time.Duration(config.NodePushingInterval))
+
+	pollTicker := time.NewTicker(time.Second * 60)
+	pushTicker := time.NewTicker(time.Second * 60)
 
 	c.syncUsers() // 首次同步用户数据
 	for {
@@ -71,7 +74,7 @@ func (c *V2boardCore) syncUsers() {
 
 	fmt.Printf("获得用户数据: %d 个\n", len(users.Users))
 
-	oldInbound, err := c.GetInbound(1)
+	oldInbound, err := c.GetInbound("v2board")
 	if err != nil {
 		log.Printf("Error syncing users: %s \n", err)
 		return
@@ -192,10 +195,10 @@ func (c *V2boardCore) reportTraffic() {
 	fmt.Printf("流量上报成功 %d \n", len(trafficData))
 }
 
-func (c *V2boardCore) GetInbound(id int) (*model.Inbound, error) {
+func (c *V2boardCore) GetInbound(id string) (*model.Inbound, error) {
 	db := database.GetDB()
 	inbound := &model.Inbound{}
-	err := db.Model(model.Inbound{}).First(inbound, id).Error
+	err := db.Model(model.Inbound{}).Where("remark = ?", id).First(inbound).Error
 	if err != nil {
 		return nil, err
 	}
