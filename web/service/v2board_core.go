@@ -106,7 +106,7 @@ func (c *V2boardCore) syncUsers(initial bool) {
 	// 批量插入新用户（每批1000个）
 	batchSize := 1000
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, 100) // 并发限制 100 个
+	sem := make(chan struct{}, 10) // 并发限制 100 个
 
 	for i := 0; i < len(remoteUsers.Users); i += batchSize {
 		end := i + batchSize
