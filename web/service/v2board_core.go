@@ -3,6 +3,7 @@ package service
 import (
 	"encoding/json"
 	"fmt"
+	"golang.org/x/sync/errgroup"
 	"log"
 	"resty.dev/v3"
 	"strconv"
@@ -110,40 +111,64 @@ func (c *V2boardCore) syncUsers(initial bool) {
 		return
 	}
 
-	// 批量插入新用户（每批1000个）
-	batchSize := 1000
-	userCacheLock.Lock()
-	for i := 0; i < len(remoteUsers.Users); i += batchSize {
-		end := i + batchSize
-		if end > len(remoteUsers.Users) {
-			end = len(remoteUsers.Users)
+	// 去重 remoteUsers.Users
+	uniqueUsers := make([]v2board.UserItem, 0)
+	seen := make(map[int]struct{}) // 如果是按 Uuid 去重可以改为 map[string]struct{}
+	for _, user := range remoteUsers.Users {
+		if _, ok := seen[user.Id]; !ok {
+			seen[user.Id] = struct{}{}
+			uniqueUsers = append(uniqueUsers, user)
 		}
-		batch := remoteUsers.Users[i:end]
-		for _, user := range batch {
+	}
+
+	// 并发添加用户，最多10个并发
+	semaphore := make(chan struct{}, 10)
+	var g errgroup.Group
+
+	for _, user := range uniqueUsers {
+		user := user // 避免闭包捕获问题
+		semaphore <- struct{}{}
+		g.Go(func() error {
+			defer func() { <-semaphore }()
+
 			email := strconv.Itoa(user.Id)
+
+			userCacheLock.Lock()
 			localUser, exists := localUserCache[email]
-			if !exists || localUser.Uuid != user.Uuid {
+			if exists && localUser.Uuid != user.Uuid {
+				_ = c.xrayApi.RemoveUser2(oldInbound.Tag, email)
+				exists = false
+			}
+			userCacheLock.Unlock()
+
+			if !exists {
 				cipher := ""
 				if oldInbound.Protocol == "shadowsocks" {
 					cipher = oldSettings["method"].(string)
 				}
-				err = c.xrayApi.AddUser(string(oldInbound.Protocol), oldInbound.Tag, map[string]any{
+				err := c.xrayApi.AddUser(string(oldInbound.Protocol), oldInbound.Tag, map[string]any{
 					"email":    email,
 					"id":       user.Uuid,
 					"password": user.Uuid,
-					"flow":     "",
 					"cipher":   cipher,
+					"security": "",
+					"flow":     "",
 				})
 				if err != nil {
 					log.Printf("Xray API add user failed: %s \n", err)
-					continue
+					return nil
 				}
-				//fmt.Println("添加用户:", email)
+
+				userCacheLock.Lock()
 				localUserCache[email] = user
+				userCacheLock.Unlock()
 			}
-		}
+			return nil
+		})
 	}
-	userCacheLock.Unlock()
+
+	// 等待所有任务完成
+	_ = g.Wait()
 
 	if !initial {
 		// 差异对比：删除远程不存在的用户
@@ -158,7 +183,7 @@ func (c *V2boardCore) syncUsers(initial bool) {
 				continue
 			}
 			if _, ok := remoteMap[inboundUser.Email]; !ok {
-				_ = c.xrayApi.RemoveUser(oldInbound.Tag, inboundUser.Email)
+				_ = c.xrayApi.RemoveUser2(oldInbound.Tag, inboundUser.Email)
 				fmt.Println("删除用户:", inboundUser.Email)
 				delete(localUserCache, inboundUser.Email)
 			}
